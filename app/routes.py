@@ -9,7 +9,7 @@ def index():
 
 @main_bp.route('/api/clients', methods=['POST'])
 def save_profile():
-    """Saves or updates core client profile variables."""
+    """Saves or updates full profile configuration parameters."""
     data = request.get_json() or {}
     profile = GymService.save_client_profile(data)
     if not profile:
@@ -37,10 +37,18 @@ def save_progress():
     log = GymService.save_weekly_progress(name, adherence)
     return jsonify({"status": "success", "progress_log": log}), 201
 
+@main_bp.route('/api/clients/<string:name>/summary', methods=['GET'])
+def get_summary(name):
+    """Retrieves composite records including adherence milestones and latest stats."""
+    summary = GymService.get_client_summary(name)
+    if not summary:
+        return jsonify({"status": "error", "message": "Client summary record not found"}), 404
+    return jsonify({"status": "success", "summary": summary})
+
 @main_bp.route('/api/clients/<string:name>/bmi', methods=['GET'])
 def get_bmi(name):
     """Evaluates dynamic clinical tracking parameters to diagnose metric risks."""
-    bmi_data = GymService.calculate_bmi_metrics(name)
+    bmi_data = GymService.calculate_bmi_info(name)
     if not bmi_data:
         return jsonify({"status": "error", "message": "Insufficient biometric data indices recorded"}), 400
     return jsonify({"status": "success", "analytics": bmi_data})
@@ -57,3 +65,25 @@ def log_workout(name):
         
     w_id = GymService.log_workout_session(name, w_data, e_data)
     return jsonify({"status": "success", "workout_id": w_id}), 201
+
+@main_bp.route('/api/clients/<string:name>/metrics', methods=['POST'])
+def log_metrics(name):
+    """Logs raw data tracking elements like body fat and waistlines into rows."""
+    data = request.get_json() or {}
+    if not data.get('date') or not data.get('weight'):
+        return jsonify({"status": "error", "message": "Date and weight attributes required"}), 400
+    GymService.log_body_metrics(name, data)
+    return jsonify({"status": "success", "message": "Biometric variables logged successfully"}), 201
+
+@main_bp.route('/api/clients/<string:name>/charts/<string:chart_type>', methods=['GET'])
+def get_analytics_chart(name, chart_type):
+    """Streams transient Base64 telemetry images matching requested parameters (adherence or weight)."""
+    if chart_type not in ["adherence", "weight"]:
+        return jsonify({"status": "error", "message": "Invalid analytical graph request parameter"}), 400
+        
+    table_target = "progress" if chart_type == "adherence" else "metrics"
+    chart_str = GymService.generate_trend_chart(name, table_target)
+    
+    if not chart_str:
+        return jsonify({"status": "error", "message": f"Insufficient records to map {chart_type} trends"}), 444
+    return jsonify({"status": "success", "chart_base64": chart_str})
