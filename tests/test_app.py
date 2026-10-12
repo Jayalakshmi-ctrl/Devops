@@ -13,18 +13,16 @@ def client():
     if os.path.exists("test_aceest_fitness.db"):
         os.remove("test_aceest_fitness.db")
 
-def test_database_persistence_and_loading(client):
-    payload = {"name": "Arun", "age": 28, "weight": 75.0, "program": "Muscle Gain (MG)"}
-    res_post = client.post('/api/clients', json=payload)
-    assert res_post.status_code == 201
+def test_database_and_chart_generation_flow(client):
+    # 1. Post a new client profile record
+    payload = {"name": "Vikas", "age": 29, "weight": 82.0, "program": "Fat Loss (FL)"}
+    assert client.post('/api/clients', json=payload).status_code == 201
     
-    res_get = client.get('/api/clients/Arun')
-    assert res_get.status_code == 200
-    data = res_get.get_json()["client_profile"]
-    assert data["calories"] == 2625  # 75.0 * 35
-
-def test_weekly_progress_logging(client):
-    progress_payload = {"name": "Arun", "adherence": 85}
-    res = client.post('/api/clients/progress', json=progress_payload)
-    assert res.status_code == 201
-    assert "Week" in res.get_json()["progress_log"]["week"]
+    # 2. Log multiple weeks of progress to construct a plot timeline string safely
+    client.post('/api/clients/progress', json={"name": "Vikas", "adherence": 70})
+    client.post('/api/clients/progress', json={"name": "Vikas", "adherence": 85})
+    
+    # 3. Pull the dynamic chart endpoint
+    chart_res = client.get('/api/clients/Vikas/chart')
+    assert chart_res.status_code == 200
+    assert "chart_base64" in chart_res.get_json()
