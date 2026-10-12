@@ -1,94 +1,101 @@
-import io
-import base64
-import csv
-import matplotlib
-# Prevent matplotlib from trying to open a desktop GUI window in the background
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
+import sqlite3
+from datetime import datetime
 
 class GymService:
-    """Manages multi-client data registries, calorie engines, and analytical reporting models."""
+    """Manages persistent SQLite connection pools, client profiles, and progress logs."""
+    
+    DB_NAME = "aceest_fitness.db"
 
     PROGRAMS = {
-        "Fat Loss (FL)": {"workout": "Back Squat, Cardio, Bench, Deadlift, Recovery",
-                          "diet": "Egg Whites, Chicken, Fish Curry",
-                          "color": "#e74c3c", "calorie_factor": 22},
-        "Muscle Gain (MG)": {"workout": "Squat, Bench, Deadlift, Press, Rows",
-                             "diet": "Eggs, Biryani, Mutton Curry",
-                             "color": "#2ecc71", "calorie_factor": 35},
-        "Beginner (BG)": {"workout": "Air Squats, Ring Rows, Push-ups",
-                          "diet": "Balanced Tamil Meals",
-                          "color": "#3498db", "calorie_factor": 26}
+        "Fat Loss (FL)": {"factor": 22},
+        "Muscle Gain (MG)": {"factor": 35},
+        "Beginner (BG)": {"factor": 26}
     }
 
-    # Internal list database simulating multi-client tracking
-    CLIENTS_REGISTRY = []
+    @classmethod
+    def _get_db_connection(cls):
+        """Creates a thread-safe cursor execution link to the database file backend."""
+        conn = sqlite3.connect(cls.DB_NAME)
+        # Allows accessing columns by name dict indexes rather than raw tuples
+        conn.row_factory = sqlite3.Row
+        return conn
 
     @classmethod
-    def get_program_details(cls, name):
-        return cls.PROGRAMS.get(name)
+    def init_db(cls):
+        """Architects structural entity tables if missing from the runtime instance environment."""
+        with cls._get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS clients (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE,
+                    age INTEGER,
+                    weight REAL,
+                    program TEXT,
+                    calories INTEGER
+                )
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS progress (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    client_name TEXT,
+                    week TEXT,
+                    adherence INTEGER
+                )
+            """)
+            conn.commit()
 
     @classmethod
-    def calculate_calories(cls, program_name, weight):
-        program = cls.get_program_details(program_name)
-        if not program or not weight or weight <= 0:
-            return None
-        return int(weight * program["calorie_factor"])
-
-    @classmethod
-    def save_client(cls, name, age, weight, program, adherence, notes):
-        """Appends a new client profile payload onto the systemic tracking engine."""
+    def save_client_profile(cls, name, age, weight, program):
+        """Calculates energy targets and registers or overrides client records."""
         if not name or not program or program not in cls.PROGRAMS:
             return None
+
+        calories = int(float(weight or 0.0) * cls.PROGRAMS[program]["factor"])
+
+        with cls._get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT OR REPLACE INTO clients (name, age, weight, program, calories)
+                VALUES (?, ?, ?, ?, ?)
+            """, (name, int(age) if age else 0, float(weight) if weight else 0.0, program, calories))
+            conn.commit()
             
-        estimated_calories = cls.calculate_calories(program, weight)
-        client_profile = {
-            "name": name,
-            "age": int(age) if age else 0,
-            "weight": float(weight) if weight else 0.0,
-            "program": program,
-            "adherence": int(adherence) if adherence else 0,
-            "notes": str(notes) if notes else "",
-            "estimated_calories": estimated_calories
-        }
-        cls.CLIENTS_REGISTRY.append(client_profile)
-        return client_profile
+        return {"name": name, "age": age, "weight": weight, "program": program, "calories": calories}
 
     @classmethod
-    def get_all_clients(cls):
-        return cls.CLIENTS_REGISTRY
-
-    @classmethod
-    def generate_progress_chart(cls):
-        """Assembles a Matplotlib bar graph and renders it as an exportable Base64 image payload."""
-        if not cls.CLIENTS_REGISTRY:
+    def load_client_profile(cls, name):
+        """Fetches distinct relational profile summaries from the database rows."""
+        with cls._get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM clients WHERE name=?", (name,))
+            row = cur.fetchone()
+            
+        if not row:
             return None
             
-        names = [c["name"] for c in cls.CLIENTS_REGISTRY]
-        adherence = [c["adherence"] for c in cls.CLIENTS_REGISTRY]
-        
-        fig, ax = plt.subplots(figsize=(5, 3))
-        ax.bar(names, adherence, color="#d4af37")
-        ax.set_ylabel("Adherence %")
-        ax.set_title("Client Progress Tracker")
-        plt.tight_layout()
-        
-        # Buffer and stream binary image payload straight out without disk footprints
-        img_buffer = io.BytesIO()
-        plt.savefig(img_buffer, format='png')
-        img_buffer.seek(0)
-        base64_str = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
-        plt.close(fig) # Flush engine context
-        return base64_str
+        return {
+            "name": row["name"],
+            "age": row["age"],
+            "weight": row["weight"],
+            "program": row["program"],
+            "calories": row["calories"]
+        }
 
     @classmethod
-    def generate_csv_data(cls):
-        """Compiles rows of client records inside memory buffers for file export streams."""
-        output = io.StringIO()
-        writer = csv.writer(output)
-        writer.writerow(["Name", "Age", "Weight", "Program", "Adherence", "Notes"])
-        
-        for c in cls.CLIENTS_REGISTRY:
-            writer.writerow([c["name"], c["age"], c["weight"], c["program"], c["adherence"], c["notes"]])
+    def save_weekly_progress(cls, name, adherence):
+        """Generates dynamic chronological week strings and stores adherence data logs."""
+        if not name:
+            return None
             
-        return output.getvalue()
+        week_string = datetime.now().strftime("Week %U - %Y")
+        
+        with cls._get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO progress (client_name, week, adherence)
+                VALUES (?, ?, ?)
+            """, (name, week_string, int(adherence) if adherence else 0))
+            conn.commit()
+            
+        return {"client_name": name, "week": week_string, "adherence": adherence}

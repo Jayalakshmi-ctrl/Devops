@@ -1,54 +1,42 @@
-from flask import Blueprint, jsonify, request, Response
+from flask import Blueprint, jsonify, request
 from app.services import GymService
 
 main_bp = Blueprint('main', __name__)
 
 @main_bp.route('/', methods=['GET'])
 def index():
-    return jsonify({"status": "success", "message": "ACEest System Environment v3 Live"})
+    return jsonify({"status": "success", "message": "ACEest DB-Backed API Engine Live"})
 
-@main_bp.route('/api/programs/<string:name>', methods=['GET'])
-def get_program(name):
-    weight = request.args.get('weight', type=float, default=0.0)
-    data = GymService.get_program_details(name)
-    if not data:
-        return jsonify({"status": "error", "message": "Program not found"}), 404
-        
-    res = {"program": name, "workout": data["workout"], "diet": data["diet"]}
-    if weight > 0:
-        res["estimated_calories"] = GymService.calculate_calories(name, weight)
-    return jsonify(res)
+@main_bp.route('/api/clients', methods=['POST'])
+def save_client():
+    """Maps to save_client logic to create or update core metric sets."""
+    data = request.get_json() or {}
+    name = data.get('name')
+    program = data.get('program')
 
-@main_bp.route('/api/clients', methods=['POST', 'GET'])
-def manage_clients():
-    """Handles POST payloads to save client data records and GET lookups to list registry pools."""
-    if request.method == 'POST':
-        data = request.get_json() or {}
-        profile = GymService.save_client(
-            data.get('name'), data.get('age'), data.get('weight'),
-            data.get('program'), data.get('adherence'), data.get('notes')
-        )
-        if not profile:
-            return jsonify({"status": "error", "message": "Invalid registration input variables"}), 400
-        return jsonify({"status": "success", "client": profile}), 201
-        
-    # GET Logic: List current registry pool metrics
-    return jsonify({"clients": GymService.get_all_clients()})
+    if not name or not program:
+        return jsonify({"status": "error", "message": "Name and Program parameter fields required"}), 400
 
-@main_bp.route('/api/clients/chart', methods=['GET'])
-def get_chart():
-    """Returns analytics data along with a Base64 graphical image string representation."""
-    chart_b64 = GymService.generate_progress_chart()
-    if not chart_b64:
-        return jsonify({"status": "error", "message": "No active client metrics to chart"}), 404
-    return jsonify({"chart_base64": chart_b64})
+    profile = GymService.save_client_profile(name, data.get('age'), data.get('weight'), program)
+    return jsonify({"status": "success", "profile": profile}), 201
 
-@main_bp.route('/api/clients/export', methods=['GET'])
-def export_clients():
-    """Streams a dynamically generated CSV spreadsheet attachment back to the user."""
-    csv_data = GymService.generate_csv_data()
-    return Response(
-        csv_data,
-        mimetype="text/csv",
-        headers={"Content-disposition": "attachment; filename=clients_export.csv"}
-    )
+@main_bp.route('/api/clients/<string:name>', methods=['GET'])
+def load_client(name):
+    """Maps to load_client logic to query historical entity fields."""
+    profile = GymService.load_client_profile(name)
+    if not profile:
+        return jsonify({"status": "error", "message": "Requested client entity profile not found"}), 404
+    return jsonify({"status": "success", "client_profile": profile})
+
+@main_bp.route('/api/clients/progress', methods=['POST'])
+def save_progress():
+    """Maps to save_progress logic to record adherence benchmarks against schedules."""
+    data = request.get_json() or {}
+    name = data.get('name')
+    adherence = data.get('adherence')
+
+    if not name or adherence is None:
+        return jsonify({"status": "error", "message": "Client name and adherence metrics are required"}), 400
+
+    log = GymService.save_weekly_progress(name, adherence)
+    return jsonify({"status": "success", "progress_log": log}), 201
