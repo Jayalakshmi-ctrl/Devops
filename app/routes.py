@@ -9,28 +9,25 @@ def index():
 
 @main_bp.route('/api/clients', methods=['POST'])
 def save_client():
-    """Maps to save_client logic to create or update core metric sets."""
     data = request.get_json() or {}
     name = data.get('name')
     program = data.get('program')
 
     if not name or not program:
-        return jsonify({"status": "error", "message": "Name and Program parameter fields required"}), 400
+        return jsonify({"status": "error", "message": "Name and Program fields required"}), 400
 
     profile = GymService.save_client_profile(name, data.get('age'), data.get('weight'), program)
     return jsonify({"status": "success", "profile": profile}), 201
 
 @main_bp.route('/api/clients/<string:name>', methods=['GET'])
 def load_client(name):
-    """Maps to load_client logic to query historical entity fields."""
     profile = GymService.load_client_profile(name)
     if not profile:
-        return jsonify({"status": "error", "message": "Requested client entity profile not found"}), 404
+        return jsonify({"status": "error", "message": "Client profile not found"}), 404
     return jsonify({"status": "success", "client_profile": profile})
 
 @main_bp.route('/api/clients/progress', methods=['POST'])
 def save_progress():
-    """Maps to save_progress logic to record adherence benchmarks against schedules."""
     data = request.get_json() or {}
     name = data.get('name')
     adherence = data.get('adherence')

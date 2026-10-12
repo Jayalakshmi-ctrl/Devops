@@ -14,15 +14,14 @@ class GymService:
 
     @classmethod
     def _get_db_connection(cls):
-        """Creates a thread-safe cursor execution link to the database file backend."""
+        """Creates a thread-safe connection link to the database backend."""
         conn = sqlite3.connect(cls.DB_NAME)
-        # Allows accessing columns by name dict indexes rather than raw tuples
         conn.row_factory = sqlite3.Row
         return conn
 
     @classmethod
     def init_db(cls):
-        """Architects structural entity tables if missing from the runtime instance environment."""
+        """Architects structural entity tables if missing from the environment."""
         with cls._get_db_connection() as conn:
             cur = conn.cursor()
             cur.execute("""
@@ -84,7 +83,7 @@ class GymService:
 
     @classmethod
     def save_weekly_progress(cls, name, adherence):
-        """Generates dynamic chronological week strings and stores adherence data logs."""
+        """Generates dynamic chronological week strings and stores adherence logs."""
         if not name:
             return None
             
