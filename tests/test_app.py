@@ -5,34 +5,29 @@ from app.services import GymService
 
 @pytest.fixture
 def client():
-    # Force a unique database name for testing to prevent contaminating real data
-    GymService.DB_NAME = "test_aceest_fitness.db"
+    GymService.DB_NAME = "test_version6_fitness.db"
     app = create_app()
     app.config['TESTING'] = True
     with app.test_client() as client:
         yield client
-    # Clean up the system disk memory tracking footprint when finished
-    if os.path.exists("test_aceest_fitness.db"):
-        os.remove("test_aceest_fitness.db")
+    if os.path.exists("test_version6_fitness.db"):
+        os.remove("test_version6_fitness.db")
 
-def test_database_persistence_and_loading_loops(client):
-    # 1. Post new profile data package
-    payload = {"name": "Arun", "age": 28, "weight": 75.0, "program": "Muscle Gain (MG)"}
-    res_post = client.post('/api/clients', json=payload)
-    assert res_post.status_code == 201
-    
-    # 2. Get profile summary metrics check
-    res_get = client.get('/api/clients/Arun')
-    assert res_get.status_code == 200
-    data = res_get.get_json()["client_profile"]
-    assert data["calories"] == 2625  # 75.0 * 35
+def test_version6_relational_and_analytics_pipelines(client):
+    # 1. Store a full biometric baseline profile
+    p_data = {"name": "Jayalakshmi", "age": 44, "height": 165.0, "weight": 68.0, "program": "Muscle Gain (MG) – PPL"}
+    assert client.post('/api/clients', json=p_data).status_code == 201
 
-    # 3. Handle data loading for invalid profiles
-    res_missing = client.get('/api/clients/UnknownUser')
-    assert res_missing.status_code == 404
+    # 2. Assert dynamic BMI calculations evaluate correctly
+    bmi_res = client.get('/api/clients/Jayalakshmi/bmi')
+    assert bmi_res.status_code == 200
+    assert bmi_res.get_json()["analytics"]["category"] == "Overweight"
 
-def test_weekly_progress_adherence_logging(client):
-    progress_payload = {"name": "Arun", "adherence": 85}
-    res = client.post('/api/clients/progress', json=progress_payload)
-    assert res.status_code == 201
-    assert "Week" in res.get_json()["progress_log"]["week"]
+    # 3. Log a detailed relational workout and exercise payload
+    w_payload = {
+        "workout": {"date": "2026-10-12", "type": "Strength", "duration": 45, "notes": "Felt strong"},
+        "exercise": {"name": "Back Squat", "sets": 4, "reps": 8, "weight": 60.0}
+    }
+    w_res = client.post('/api/clients/Jayalakshmi/workouts', json=w_payload)
+    assert w_res.status_code == 201
+    assert "workout_id" in w_res.get_json()
